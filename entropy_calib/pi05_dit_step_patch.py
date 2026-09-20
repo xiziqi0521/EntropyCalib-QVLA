@@ -25,18 +25,24 @@ this project's build_gptq_weights_entropy.py first hit against pi0.5.
 
 This module reimplements Pi0Pytorch.sample_actions's control flow (same
 while-loop, same Euler step, same call to self.denoise_step) but brackets
-each iteration with `enter_dit_quant_step`/`exit_dit_quant_step`, then
-monkey-patches it onto the class. It does NOT touch openpi's source tree.
+each iteration with `set_dit_quant_step(t)`, then monkey-patches it onto
+the class. It does NOT touch openpi's or Omega-QVLA-official-baseline's
+source tree -- both repos stay completely unmodified.
 
-It DOES rely on `enter_dit_quant_step`/`exit_dit_quant_step` -- two small,
-purely-additive, @torch._dynamo.disable-marked functions added to
-Omega-QVLA-official-baseline's `gr00t/quantization/dit_step_context.py`
-alongside the pre-existing `set_dit_quant_step` context manager (which is
-left unchanged for its other caller, GR00T's own
-flow_matching_action_head.py). They exist because a `with` block around
-this loop -- torch.compile'd as part of sample_actions -- graph-breaks on
-`ContextVar.set`/contextlib's generator `__enter__`/`__exit__`, which left
-`TORCHINDUCTOR_CUDAGRAPHS` unable to form a non-empty graph for this loop.
+(An earlier version of this patch used two small additive functions,
+`enter_dit_quant_step`/`exit_dit_quant_step`, added directly to
+Omega-QVLA-official-baseline's `gr00t/quantization/dit_step_context.py`,
+to dodge a TorchDynamo graph-break on `ContextVar.set`/contextlib's
+generator `__enter__`/`__exit__` that blocked `TORCHINDUCTOR_CUDAGRAPHS`
+from capturing this loop. That graph-break only mattered for a cudagraphs
+experiment on this *calibration* code path -- separately confirmed that
+the actual deployed LIBERO eval servers never apply this patch at all
+(openpi_inference_service.py runs vanilla, unpatched sample_actions; the
+packed W4A4 kernel dynamically re-quantizes activations every call and
+never reads the per-step scale table this patch's context feeds), so the
+cudagraphs win didn't carry over to anything real. Reverted per explicit
+instruction to keep both source repos untouched -- kernel/runtime
+experiments now live on a separate copy, never in-place.)
 
 Usage: import and call apply_patch() once, BEFORE constructing/loading the
 policy, with Omega-QVLA-official-baseline (not Omega-QVLA) on sys.path:
@@ -56,7 +62,7 @@ import inspect
 
 import torch
 
-from gr00t.quantization.dit_step_context import enter_dit_quant_step, exit_dit_quant_step
+from gr00t.quantization.dit_step_context import set_dit_quant_step
 
 _PATCHED = False
 
@@ -104,22 +110,14 @@ def _patched_sample_actions(self, device, observation, noise=None, num_steps=10)
     time = torch.ones((), dtype=torch.float32, device=device)
     for t in range(num_steps):
         expanded_time = time.expand(bsize)
-        # Plain enter/exit calls (both @torch._dynamo.disable), not a `with`
-        # block -- avoids TorchDynamo tracing into contextvars.ContextVar /
-        # contextlib's generator-based __enter__/__exit__, which graph-broke
-        # on every iteration and left CUDA-graph capture of this loop unable
-        # to form a non-empty graph (TORCHINDUCTOR_CUDAGRAPHS=1 previously
-        # logged "CUDA graph is empty" every iteration). Same ContextVar
-        # storage under the hood; only the call shape changed.
-        tokens = enter_dit_quant_step(t, num_steps)
-        v_t = self.denoise_step(
-            state,
-            prefix_pad_masks,
-            past_key_values,
-            x_t,
-            expanded_time,
-        )
-        exit_dit_quant_step(tokens)
+        with set_dit_quant_step(t, total=num_steps):
+            v_t = self.denoise_step(
+                state,
+                prefix_pad_masks,
+                past_key_values,
+                x_t,
+                expanded_time,
+            )
 
         x_t = x_t + dt * v_t
         time = time + dt
