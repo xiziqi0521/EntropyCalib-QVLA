@@ -1,0 +1,23 @@
+# Default hyperparameters for entropy-guided calibration sampling.
+# See entropy_calib/ for the implementations these map to.
+
+entropy:
+  # Number of stochastic denoising passes per observation used to estimate
+  # predictive entropy (entropy_calib.multi_sample_policy.compute_entropy_trace).
+  num_noise_samples: 10
+  # "mean" averages entropy over the full predicted action horizon; "first"
+  # uses only the immediate next-action step.
+  reduce: mean
+
+labeling:
+  # HDBSCAN min_cluster_size (entropy_calib.labeling.label_precision_segments).
+  min_cluster_size: 5
+  # Leading timesteps forced to "not precision" before clustering (matches
+  # DemoSpeedup's fixed warmup skip).
+  warmup_steps: 50
+
+sample_selection:
+  # Fraction of the calibration budget reserved for label==1 (redundant)
+  # samples, kept for calibration diversity.
+  redundant_fraction: 0.2
+  seed: 0

@@ -1,0 +1,13 @@
+# All intermediate/generated artifacts: observation pools, entropy caches,
+# quantization packs (tens of GB each), eval logs and summaries. None of
+# this is source code -- it's all reproducible by re-running the scripts/
+# pipelines against a checkpoint.
+cache/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# OS
+.DS_Store
