@@ -71,16 +71,6 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--act-percentile", type=float, default=99.9)
     p.add_argument("--save-dtype", default="float16", choices=["float16", "float32"])
     p.add_argument("--max-layers", type=int, default=0)
-    p.add_argument("--w-bits", type=int, default=4,
-                    help="Weight quantization bit-width, passed through to the official "
-                         "build script's own --w-bits (default 4, matching the validated "
-                         "'official flow' recipe). Values other than 4 skip the deployed "
-                         "packed-kernel path at eval time (GR00T-W4A4's can_run() only "
-                         "accepts 4/4) and fall back to its fake-quantize simulation path "
-                         "-- useful for a kernel-free accuracy probe at other bit-widths.")
-    p.add_argument("--a-bits", type=int, default=4,
-                    help="Activation quantization bit-width, passed through to the official "
-                         "build script's own --a-bits. See --w-bits for the fallback-path note.")
     return p.parse_args()
 
 
@@ -107,8 +97,6 @@ def main() -> None:
         "--duquant-block-out", str(args.duquant_block_out),
         "--act-percentile", str(args.act_percentile),
         "--save-dtype", args.save_dtype,
-        "--w-bits", str(args.w_bits),
-        "--a-bits", str(args.a_bits),
     ]
     if args.max_layers > 0:
         argv += ["--max-layers", str(args.max_layers)]

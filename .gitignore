@@ -11,3 +11,8 @@ __pycache__/
 
 # OS
 .DS_Store
+
+# Local-only experiments kept out of the public repo (currently: sub-4-bit
+# probing). The published repo covers the validated W4A4 recipe only.
+scripts/probe_w3a3.sh
+scripts/_local_w3a3_pack_builder.py
